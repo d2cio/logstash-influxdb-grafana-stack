@@ -1,0 +1,73 @@
+version: '1.0'
+services:
+  - name: influxdb
+    type: docker
+    image: influxdb
+    version: 1.8
+    env:
+      INFLUXDB_ADMIN_USER: null
+      INFLUXDB_ADMIN_PASSWORD: null
+      INFLUXDB_USER: null
+      INFLUXDB_USER_PASSWORD: null
+      INFLUXDB_DB: logs
+    ports:
+      - 8086
+    remoteAccess: false
+    volumes:
+      - directory: /var/lib/influxdb
+    configFiles:
+      - dest: /etc/influxdb/influxdb.conf
+        src: ./configs/influxdb.conf
+      - dest: /docker-entrypoint-initdb.d/01-init.iql
+        src: ./configs/01-init.iql
+    deployTo:
+      - logs
+
+  - name: logstash
+    type: docker
+    image: logstash
+    version: 7.9.0
+    ports:
+      - 12201/udp
+    remoteAccess: true
+    globalDeps: logstash-plugin install logstash-output-influxdb
+    env:
+      LS_JAVA_OPTS: "-Xmx512m -Xms512m"
+    configFiles:
+      - dest: /usr/share/logstash/config/logstash.yml
+        src: ./configs/logstash.yml
+      - dest: /usr/share/logstash/pipeline/logstash.conf
+        src: ./configs/logstash.conf
+    deployTo:
+      - logs
+
+  - name: grafana
+    type: docker
+    image: grafana/grafana
+    version: latest
+    ports:
+      - 3000
+    remoteAccess: false
+    volumes:
+      - directory: /var/lib/grafana
+    volumesUID: 472
+    deployTo:
+      - logs
+
+  - name: web
+    type: nginx
+    version: 1.19
+    ports:
+      - 80
+      - 443
+    remoteAccess: true
+    serviceFiles:
+      - name: grafana
+    deployTo:
+      - logs
+
+hosts:
+  - name: logs
+    requirements:
+      cores: 1
+      memory: 4
